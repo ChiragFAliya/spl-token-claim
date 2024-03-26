@@ -48,14 +48,14 @@ pub mod spl_claim_contract {
         Ok(())
     }
 
-    pub fn check_eligibility(ctx: Context<CheckEligibility>) -> Result<()> {
-        let users = ctx.accounts.user_list.user;
-        if !users.contains(ctx.accounts.user.key) {
-            return err!(Errors::NotEligible);
-        }
+    // pub fn check_eligibility(ctx: Context<CheckEligibility>) -> Result<()> {
+    //     let users = ctx.accounts.user_list.user;
+    //     if !users.contains(ctx.accounts.user.key) {
+    //         return err!(Errors::NotEligible);
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub fn claim_token(ctx: Context<ClaimToken>, bump: u8, index: u64) -> Result<()> {
         let users = ctx.accounts.user_list.user;
@@ -120,13 +120,13 @@ pub struct UpdateUser<'info> {
     // pub user_pubkey: AccountInfo<'info>,
 }
 
-#[derive(Accounts)]
-pub struct CheckEligibility<'info> {
-    #[account(mut)]
-    pub user_list: Account<'info, User>,
-    #[account(mut)]
-    pub user: Signer<'info>,
-}
+// #[derive(Accounts)]
+// pub struct CheckEligibility<'info> {
+//     #[account(mut)]
+//     pub user_list: Account<'info, User>,
+//     #[account(mut)]
+//     pub user: Signer<'info>,
+// }
 
 #[derive(Accounts)]
 pub struct ClaimToken<'info> {
