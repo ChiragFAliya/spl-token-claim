@@ -86,6 +86,8 @@ pub mod spl_claim_contract {
         ctx.accounts.global.claimable_tokens -= amount;
         ctx.accounts.global.claimed_tokens += amount;
 
+        ctx.accounts.user_list.user[index as usize] = Pubkey::default();
+
         Ok(())
     }
 
