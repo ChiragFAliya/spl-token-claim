@@ -91,6 +91,38 @@ pub mod spl_claim_contract {
         Ok(())
     }
 
+    pub fn claim_remaining_tokens(
+        ctx: Context<ClaimRemainingTokens>,
+        bump: u8,
+        amount: u64,
+    ) -> Result<()> {
+        if !(ctx.accounts.owner.key == &Pubkey::from_str(ADMIN).unwrap()) {
+            return Err(Errors::NotAuthorized.into());
+        }
+
+        let remaining_amount = ctx.accounts.list_ata.amount;
+        msg!("{}", remaining_amount);
+        if amount > remaining_amount {
+            return Err(Errors::InvalidInput.into());
+        }
+
+        transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.list_ata.to_account_info().clone(),
+                    to: ctx.accounts.owner_ata.to_account_info().clone(),
+                    authority: ctx.accounts.user_list.to_account_info().clone(),
+                },
+                &[&[b"list", &[bump]]],
+            ),
+            amount,
+        )?;
+
+        ctx.accounts.global.claimable_tokens -= amount;
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -144,6 +176,26 @@ pub struct ClaimToken<'info> {
     pub user_ata: Account<'info, TokenAccount>,
     #[account(mut)]
     pub list_ata: Account<'info, TokenAccount>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    ///CHECK
+    pub associated_token_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimRemainingTokens<'info> {
+    #[account(mut)]
+    pub user_list: Box<Account<'info, User>>,
+    #[account(mut)]
+    pub global: Account<'info, Global>,
+    #[account(mut)]
+    pub list_ata: Account<'info, TokenAccount>,
+    #[account(init_if_needed,payer=owner,associated_token::mint= mint, associated_token::authority = owner)]
+    pub owner_ata: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     ///CHECK
