@@ -3,7 +3,7 @@ use std::vec;
 use anchor_lang::prelude::*;
 use anchor_spl::token::{transfer, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("6mnNGTZiWSp4bJsCxea1bvi4DTsD1opZhDwbfneYzbsD");
+declare_id!("9ifhVnUaXKyqeXUfz16f77Q1dfj4JqrJS4b1VSJChGBa");
 
 #[program]
 pub mod spl_claim_contract {
@@ -28,65 +28,61 @@ pub mod spl_claim_contract {
         if !(ctx.accounts.owner.key == &Pubkey::from_str(ADMIN).unwrap()) {
             return Err(Errors::NotAuthorized.into());
         }
+        let mut user_list = ctx.accounts.user_list.load_mut()?;
         if amounts.len() != users.len() {
             return Err(Errors::InvalidInput.into());
         }
         let mut current_index = ctx.accounts.global.total_users;
         for (_, (amount, user)) in amounts.iter().zip(users.iter()).enumerate() {
-            ctx.accounts.user_list.user[current_index as usize] = *user;
-            ctx.accounts.user_list.token[current_index as usize] = *amount;
+            user_list.user[current_index as usize] = *user;
+            user_list.token[current_index as usize] = *amount;
 
             current_index += 1;
 
             ctx.accounts.global.claimable_tokens += *amount;
         }
-        // let mut u = ctx.accounts.user_list.user.get_mut(current_index as usize).unwrap();
-        // ctx.accounts.user_list.user.copy_from_slice(src)
 
         ctx.accounts.global.total_users += users.len() as u64;
 
         Ok(())
     }
 
-    // pub fn check_eligibility(ctx: Context<CheckEligibility>) -> Result<()> {
-    //     let users = ctx.accounts.user_list.user;
-    //     if !users.contains(ctx.accounts.user.key) {
-    //         return err!(Errors::NotEligible);
-    //     }
-
-    //     Ok(())
-    // }
-
     pub fn claim_token(ctx: Context<ClaimToken>, bump: u8, index: u64) -> Result<()> {
-        let users = ctx.accounts.user_list.user;
-        let owner = ctx.accounts.user.key;
+        let user_list = &mut ctx.accounts.user_list.load_mut()?;
 
-        if owner != &users[index as usize] {
-            return Err(Errors::InvalidIndex.into());
-        }
+        // let binding = ctx.accounts.user_list.clone();
+        // let mut user_list = &mut binding.load_mut()?;
 
-        let amount = ctx.accounts.user_list.token[index as usize];
+        // let users = user_list.user;
+        // let owner = ctx.accounts.user.key;
+
+        // if *owner != *cur_user {
+        //     return Err(Errors::InvalidIndex.into());
+        // }
+
+        let amount = user_list.token[index as usize];
         if amount == 0 {
             return Err(Errors::NotEligible.into());
         }
+
         transfer(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
-                    from: ctx.accounts.list_ata.to_account_info().clone(),
+                    from: ctx.accounts.global_ata.to_account_info().clone(),
                     to: ctx.accounts.user_ata.to_account_info().clone(),
-                    authority: ctx.accounts.user_list.to_account_info().clone(),
+                    authority: ctx.accounts.global.to_account_info().clone(),
                 },
-                &[&[b"list", &[bump]]],
+                &[&[b"global", &[bump]]],
             ),
             amount,
         )?;
-        ctx.accounts.user_list.token[index as usize] = 0;
+        user_list.token[index as usize] = 0;
 
         ctx.accounts.global.claimable_tokens -= amount;
         ctx.accounts.global.claimed_tokens += amount;
 
-        ctx.accounts.user_list.user[index as usize] = Pubkey::default();
+        user_list.user[index as usize] = Pubkey::default();
 
         Ok(())
     }
@@ -100,7 +96,8 @@ pub mod spl_claim_contract {
             return Err(Errors::NotAuthorized.into());
         }
 
-        let remaining_amount = ctx.accounts.list_ata.amount;
+
+        let remaining_amount = ctx.accounts.global_ata.amount;
         msg!("{}", remaining_amount);
         if amount > remaining_amount {
             return Err(Errors::InvalidInput.into());
@@ -110,11 +107,11 @@ pub mod spl_claim_contract {
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
-                    from: ctx.accounts.list_ata.to_account_info().clone(),
+                    from: ctx.accounts.global_ata.to_account_info().clone(),
                     to: ctx.accounts.owner_ata.to_account_info().clone(),
-                    authority: ctx.accounts.user_list.to_account_info().clone(),
+                    authority: ctx.accounts.global.to_account_info().clone(),
                 },
-                &[&[b"list", &[bump]]],
+                &[&[b"global", &[bump]]],
             ),
             amount,
         )?;
@@ -123,14 +120,36 @@ pub mod spl_claim_contract {
 
         Ok(())
     }
+
+    pub fn reset_users(ctx: Context<ResetUserList>) -> Result<()> {
+        if !(ctx.accounts.owner.key == &Pubkey::from_str(ADMIN).unwrap()) {
+            return Err(Errors::NotAuthorized.into());
+        }
+    
+        let mut user_list = ctx.accounts.user_list.load_mut()?;
+        for i in 0..user_list.user.len() {
+            user_list.user[i] = Pubkey::default();
+            user_list.token[i] = 0;
+        }
+    
+        ctx.accounts.global.claimable_tokens = 0;
+        ctx.accounts.global.claimed_tokens = 0;
+        ctx.accounts.global.total_users = 0;
+    
+        let mut current_index = ctx.accounts.global.total_users;
+        current_index = 0;
+    
+        Ok(())
+    }
+    
 }
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = owner,seeds = ["list".as_ref()] ,bump,space = 8 + 2008)]
-    pub user_list: Box<Account<'info, User>>,
-    #[account(init_if_needed,payer=owner,associated_token::mint= mint, associated_token::authority = user_list)]
-    pub list_ata: Box<Account<'info, TokenAccount>>,
+    #[account(zero)]
+    pub user_list: AccountLoader<'info, User>,
+    #[account(init_if_needed,payer=owner,associated_token::mint= mint, associated_token::authority = global)]
+    pub global_ata: Box<Account<'info, TokenAccount>>,
     #[account(mut)]
     pub mint: Account<'info, Mint>,
     #[account(init, payer = owner,seeds = ["global".as_ref()] ,bump,space = 8 + 24)]
@@ -146,36 +165,29 @@ pub struct Initialize<'info> {
 #[derive(Accounts)]
 pub struct UpdateUser<'info> {
     #[account(mut)]
-    pub user_list: Box<Account<'info, User>>,
+    pub user_list: AccountLoader<'info, User>,
     #[account(mut)]
     pub global: Account<'info, Global>,
     #[account(mut)]
     pub owner: Signer<'info>,
-    // pub user_pubkey: AccountInfo<'info>,
 }
 
-// #[derive(Accounts)]
-// pub struct CheckEligibility<'info> {
-//     #[account(mut)]
-//     pub user_list: Account<'info, User>,
-//     #[account(mut)]
-//     pub user: Signer<'info>,
-// }
+
 
 #[derive(Accounts)]
 pub struct ClaimToken<'info> {
     #[account(mut)]
-    pub user_list: Box<Account<'info, User>>,
+    pub user_list: AccountLoader<'info, User>,
     #[account(mut)]
-    pub global: Account<'info, Global>,
+    pub global: Box<Account<'info, Global>>,
     #[account(mut)]
     pub user: Signer<'info>,
     #[account(mut)]
-    pub mint: Account<'info, Mint>,
+    pub mint: Box<Account<'info, Mint>>,
     #[account(init_if_needed,payer=user,associated_token::mint= mint, associated_token::authority = user)]
-    pub user_ata: Account<'info, TokenAccount>,
+    pub user_ata: Box<Account<'info, TokenAccount>>,
     #[account(mut)]
-    pub list_ata: Account<'info, TokenAccount>,
+    pub global_ata: Box<Account<'info, TokenAccount>>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     ///CHECK
@@ -185,11 +197,11 @@ pub struct ClaimToken<'info> {
 #[derive(Accounts)]
 pub struct ClaimRemainingTokens<'info> {
     #[account(mut)]
-    pub user_list: Box<Account<'info, User>>,
+    pub user_list: AccountLoader<'info, User>,
     #[account(mut)]
     pub global: Account<'info, Global>,
     #[account(mut)]
-    pub list_ata: Account<'info, TokenAccount>,
+    pub global_ata: Account<'info, TokenAccount>,
     #[account(init_if_needed,payer=owner,associated_token::mint= mint, associated_token::authority = owner)]
     pub owner_ata: Account<'info, TokenAccount>,
     #[account(mut)]
@@ -202,6 +214,16 @@ pub struct ClaimRemainingTokens<'info> {
     pub associated_token_program: AccountInfo<'info>,
 }
 
+#[derive(Accounts)]
+pub struct ResetUserList<'info> {
+    #[account(mut)]
+    pub user_list: AccountLoader<'info, User>,
+    #[account(mut)]
+    pub global: Account<'info, Global>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+}
+
 #[account]
 pub struct Global {
     claimable_tokens: u64,
@@ -209,10 +231,11 @@ pub struct Global {
     total_users: u64,
 }
 
-#[account]
+#[account(zero_copy(unsafe))]
+#[repr(C)]
 pub struct User {
-    user: [Pubkey; 50],
-    token: [u64; 50],
+    user: [Pubkey; 10000],
+    token: [u64; 10000],
 }
 
 #[error_code]
@@ -226,3 +249,5 @@ pub enum Errors {
     #[msg("Invalid index!")]
     InvalidIndex,
 }
+
+
