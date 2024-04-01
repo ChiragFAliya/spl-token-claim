@@ -8,15 +8,20 @@ declare_id!("9ifhVnUaXKyqeXUfz16f77Q1dfj4JqrJS4b1VSJChGBa");
 #[program]
 pub mod spl_claim_contract {
 
+    const ADMIN_2: &str = "BFqRiQQA4oTs4zo6rFCA3fFx1RzXkRwpihDEhWSgGB1m";
     const ADMIN: &str = "4rdE7Ub5w5bc9QvFoYLRVdT3B6aLQUiD84hezHW2JEwi";
     use std::str::FromStr;
 
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        if !(ctx.accounts.owner.key == &Pubkey::from_str(ADMIN).unwrap()) {
-            return Err(Errors::NotAuthorized.into());
-        }
+        let authorized_keys = [
+    Pubkey::from_str(ADMIN).unwrap(),
+    Pubkey::from_str(ADMIN_2).unwrap(),
+  ];
+  if !authorized_keys.iter().any(|key| key == ctx.accounts.owner.key) {
+    return Err(Errors::NotAuthorized.into());
+  }
         Ok(())
     }
 
@@ -25,9 +30,13 @@ pub mod spl_claim_contract {
         amounts: Vec<u64>,
         users: Vec<Pubkey>,
     ) -> Result<()> {
-        if !(ctx.accounts.owner.key == &Pubkey::from_str(ADMIN).unwrap()) {
-            return Err(Errors::NotAuthorized.into());
-        }
+        let authorized_keys = [
+    Pubkey::from_str(ADMIN).unwrap(),
+    Pubkey::from_str(ADMIN_2).unwrap(),
+  ];
+  if !authorized_keys.iter().any(|key| key == ctx.accounts.owner.key) {
+    return Err(Errors::NotAuthorized.into());
+  }
         let mut user_list = ctx.accounts.user_list.load_mut()?;
         if amounts.len() != users.len() {
             return Err(Errors::InvalidInput.into());
@@ -92,9 +101,13 @@ pub mod spl_claim_contract {
         bump: u8,
         amount: u64,
     ) -> Result<()> {
-        if !(ctx.accounts.owner.key == &Pubkey::from_str(ADMIN).unwrap()) {
-            return Err(Errors::NotAuthorized.into());
-        }
+        let authorized_keys = [
+    Pubkey::from_str(ADMIN).unwrap(),
+    Pubkey::from_str(ADMIN_2).unwrap(),
+  ];
+  if !authorized_keys.iter().any(|key| key == ctx.accounts.owner.key) {
+    return Err(Errors::NotAuthorized.into());
+  }
 
 
         let remaining_amount = ctx.accounts.global_ata.amount;
@@ -122,9 +135,13 @@ pub mod spl_claim_contract {
     }
 
     pub fn reset_users(ctx: Context<ResetUserList>) -> Result<()> {
-        if !(ctx.accounts.owner.key == &Pubkey::from_str(ADMIN).unwrap()) {
-            return Err(Errors::NotAuthorized.into());
-        }
+        let authorized_keys = [
+    Pubkey::from_str(ADMIN).unwrap(),
+    Pubkey::from_str(ADMIN_2).unwrap(),
+  ];
+  if !authorized_keys.iter().any(|key| key == ctx.accounts.owner.key) {
+    return Err(Errors::NotAuthorized.into());
+  }
     
         let mut user_list = ctx.accounts.user_list.load_mut()?;
         for i in 0..user_list.user.len() {
@@ -242,7 +259,7 @@ pub struct User {
 pub enum Errors {
     #[msg("you are not eligible!")]
     NotEligible,
-    #[msg("you are not authorized to this !")]
+    #[msg("you are not authorized to do this !")]
     NotAuthorized,
     #[msg("Invalid input!")]
     InvalidInput,
